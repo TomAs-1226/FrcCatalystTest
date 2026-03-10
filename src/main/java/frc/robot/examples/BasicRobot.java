@@ -11,7 +11,7 @@ import frc.lib.catalyst.util.InterpolatingTable;
 import frc.lib.catalyst.util.MechanismVisualizer;
 
 /**
- * BasicRobot — A simple FrcCatalyst example with an elevator and intake.
+ * BasicRobot - A simple FrcCatalyst example with an elevator and intake.
  *
  * <p>This class demonstrates the minimum code needed to build a functional
  * competition robot using FrcCatalyst. Copy this as a starting point for
@@ -35,18 +35,14 @@ import frc.lib.catalyst.util.MechanismVisualizer;
  */
 public class BasicRobot {
 
-    // ═══════════════════════════════════════════════════════════
-    //  Controllers
-    // ═══════════════════════════════════════════════════════════
+    // --- Controllers ---
 
     private final CommandXboxController operator = new CommandXboxController(1);
 
-    // ═══════════════════════════════════════════════════════════
-    //  Mechanisms
-    // ═══════════════════════════════════════════════════════════
+    // --- Mechanisms ---
 
     /**
-     * Elevator — 2-stage cascade with Kraken X60 motors.
+     * Elevator - 2-stage cascade with Kraken X60 motors.
      *
      * Physical specs:
      * - 10:1 gear ratio
@@ -85,7 +81,7 @@ public class BasicRobot {
     );
 
     /**
-     * Intake — Roller mechanism with game piece detection.
+     * Intake - Roller mechanism with game piece detection.
      *
      * Features:
      * - 80% intake speed, 60% eject speed
@@ -105,16 +101,12 @@ public class BasicRobot {
             .build()
     );
 
-    // ═══════════════════════════════════════════════════════════
-    //  Dashboard Visualization
-    // ═══════════════════════════════════════════════════════════
+    // --- Dashboard Visualization ---
 
     private final MechanismVisualizer viz =
         new MechanismVisualizer("BasicRobot", 1.0, 2.0);
 
-    // ═══════════════════════════════════════════════════════════
-    //  Constructor
-    // ═══════════════════════════════════════════════════════════
+    // --- Constructor ---
 
     public BasicRobot() {
         // Set up dashboard visualization
@@ -125,25 +117,25 @@ public class BasicRobot {
         // Default commands
         elevator.setDefaultCommand(elevator.holdPosition());
 
-        // ── Elevator presets ──
+        // -- Elevator presets --
         operator.a().onTrue(elevator.goTo("STOW"));
         operator.b().onTrue(elevator.goTo("INTAKE"));
         operator.x().onTrue(elevator.goTo("MID"));
         operator.y().onTrue(elevator.goTo("HIGH"));
 
-        // ── Manual elevator jog ──
+        // -- Manual elevator jog --
         operator.leftBumper().whileTrue(
             elevator.jog(() -> -operator.getLeftY() * 4.0)
         );
 
-        // ── Zero elevator ──
+        // -- Zero elevator --
         operator.start().onTrue(elevator.zero());
 
-        // ── Intake controls ──
+        // -- Intake controls --
         operator.rightTrigger(0.3).whileTrue(intake.intake());
         operator.leftTrigger(0.3).whileTrue(intake.eject());
 
-        // ── Print estimated gains for tuning ──
+        // -- Print estimated gains for tuning --
         // Build a config just for estimation (doesn't create hardware)
         var estimationConfig = LinearMechanism.Config.builder()
             .motorType(MotorType.KRAKEN_X60)
@@ -157,9 +149,7 @@ public class BasicRobot {
         System.out.println("Max speed:    " + estimationConfig.estimateMaxSpeed() + " m/s");
     }
 
-    // ═══════════════════════════════════════════════════════════
-    //  Autonomous
-    // ═══════════════════════════════════════════════════════════
+    // --- Autonomous ---
 
     /**
      * Simple autonomous: score a preloaded game piece, then stow.

@@ -3,8 +3,10 @@ plugins {
     id "edu.wpi.first.GradleRIO" version "2026.2.1"
 }
 
-sourceCompatibility = JavaVersion.VERSION_17
-targetCompatibility = JavaVersion.VERSION_17
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
 
 def ROBOT_MAIN_CLASS = "frc.robot.Main"
 
@@ -16,10 +18,19 @@ deploy {
             artifacts {
                 frcJava(getArtifactTypeClass('FRCJavaArtifact')) {
                 }
+                frcStaticFileDeploy(getArtifactTypeClass('FileTreeArtifact')) {
+                    files = project.fileTree('src/main/deploy')
+                    directory = '/home/lvuser/deploy'
+                    deleteOldFiles = false
+                }
             }
         }
     }
 }
+
+def deployArtifact = deploy.targets.roborio.artifacts.frcJava
+
+wpi.java.debugJni = false
 
 def includeDesktopSupport = true
 
@@ -39,75 +50,74 @@ repositories {
     maven { url "https://3015rangerrobotics.github.io/pathplannerlib/repo" }
 }
 
-wpi.java.configureExecutableTasks(jar)
-wpi.java.configureTestTasks(test)
-
-wpi.sim.addGui().defaultEnabled = true
-wpi.sim.addDriverstation()
-
 dependencies {
+    annotationProcessor wpi.java.deps.wpilibAnnotations()
     implementation wpi.java.deps.wpilib()
     implementation wpi.java.vendor.java()
 
     roborioDebug wpi.java.deps.wpilibJniDebug(wpi.platforms.roborio)
     roborioDebug wpi.java.vendor.jniDebug(wpi.platforms.roborio)
+
     roborioRelease wpi.java.deps.wpilibJniRelease(wpi.platforms.roborio)
     roborioRelease wpi.java.vendor.jniRelease(wpi.platforms.roborio)
 
     nativeDebug wpi.java.deps.wpilibJniDebug(wpi.platforms.desktop)
     nativeDebug wpi.java.vendor.jniDebug(wpi.platforms.desktop)
+    simulationDebug wpi.sim.enableDebug()
+
     nativeRelease wpi.java.deps.wpilibJniRelease(wpi.platforms.desktop)
     nativeRelease wpi.java.vendor.jniRelease(wpi.platforms.desktop)
-
-    simulationDebug wpi.sim.enableDebug()
     simulationRelease wpi.sim.enableRelease()
 
     // FrcCatalyst (from local Maven)
     implementation "com.frccatalyst:FrcCatalyst:1.0.0"
 
-    // Test dependencies
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-
-    // WPILib + vendor JNI for tests (needed for HAL simulation in JUnit)
-    testImplementation wpi.java.deps.wpilibJniRelease(wpi.platforms.desktop)
-    testImplementation wpi.java.vendor.jniRelease(wpi.platforms.desktop)
 }
 
 test {
     useJUnitPlatform()
-    // Mechanism tests + HAL-dependent tests need CTRE/WPILib simulation runtime
+    systemProperty 'junit.jupiter.extensions.autodetection.enabled', 'true'
     exclude '**/mechanisms/**'
     exclude '**/SlewRateLimiterTest*'
     exclude '**/TimedBooleanTest*'
     forkEvery = 1
-    jvmArgs "-Xmx512m"
     testLogging {
         events "passed", "skipped", "failed"
-        showStandardStreams = false
         exceptionFormat "short"
     }
 }
 
-// Task for running all tests including mechanisms (requires sim runtime)
 tasks.register('testAll', Test) {
     useJUnitPlatform()
     classpath = tasks.test.classpath
     testClassesDirs = tasks.test.testClassesDirs
     forkEvery = 1
-    jvmArgs "-Xmx512m"
     testLogging {
         events "passed", "skipped", "failed"
-        showStandardStreams = false
         exceptionFormat "short"
     }
 }
 
+wpi.sim.addGui().defaultEnabled = true
+wpi.sim.addDriverstation()
+
+// Fat JAR — bundles ALL runtime deps into one jar so simulation and deploy work
 jar {
+    from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
+    from('src') { into 'backup/src' }
+    from('vendordeps') { into 'backup/vendordeps' }
+    from('build.gradle') { into 'backup' }
     manifest edu.wpi.first.gradlerio.GradleRIOPlugin.javaManifest(ROBOT_MAIN_CLASS)
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
 }
 
+deployArtifact.jarTask = jar
+wpi.java.configureExecutableTasks(jar)
+wpi.java.configureTestTasks(test)
+
 tasks.withType(JavaCompile) {
-    options.compilerArgs.add '-Xlint:none'
+    options.compilerArgs.add '-XDstringConcat=inline'
     options.encoding = 'UTF-8'
 }
