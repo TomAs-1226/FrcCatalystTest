@@ -3,30 +3,22 @@ plugins {
     id "edu.wpi.first.GradleRIO" version "2026.2.1"
 }
 
-java {
-    sourceCompatibility = JavaVersion.VERSION_17
-    targetCompatibility = JavaVersion.VERSION_17
-}
+sourceCompatibility = JavaVersion.VERSION_17
+targetCompatibility = JavaVersion.VERSION_17
 
 def ROBOT_MAIN_CLASS = "frc.robot.Main"
 
 deploy {
     targets {
         roborio(getTargetTypeClass('RoboRIO')) {
-            team = 9999
+            team = project.frc.getTeamOrDefault(9999)
             debug = project.frc.getDebugOrDefault(false)
             artifacts {
                 frcJava(getArtifactTypeClass('FRCJavaArtifact')) {
-                    gcType = edu.wpi.first.gradlerio.deploy.roborio.GarbageCollectorType.Other
-                    jvmArgs.add("-XX:+UseG1GC")
                 }
             }
         }
     }
-}
-
-jar {
-    manifest edu.wpi.first.gradlerio.GradleRIOPlugin.javaManifest(ROBOT_MAIN_CLASS)
 }
 
 def includeDesktopSupport = true
@@ -46,6 +38,12 @@ repositories {
     maven { url "https://maven.photonvision.org/repository/snapshots/" }
     maven { url "https://3015rangerrobotics.github.io/pathplannerlib/repo" }
 }
+
+wpi.java.configureExecutableTasks(jar)
+wpi.java.configureTestTasks(test)
+
+wpi.sim.addGui().defaultEnabled = true
+wpi.sim.addDriverstation()
 
 dependencies {
     implementation wpi.java.deps.wpilib()
@@ -76,59 +74,40 @@ dependencies {
     testImplementation wpi.java.vendor.jniRelease(wpi.platforms.desktop)
 }
 
-// Configure native library paths for test JVM (needed for HAL)
-def nativeConfigForTest = { Test testTask ->
-    testTask.useJUnitPlatform()
-    testTask.forkEvery = 1
-    testTask.jvmArgs "-Xmx512m"
-    testTask.testLogging {
+test {
+    useJUnitPlatform()
+    // Mechanism tests + HAL-dependent tests need CTRE/WPILib simulation runtime
+    exclude '**/mechanisms/**'
+    exclude '**/SlewRateLimiterTest*'
+    exclude '**/TimedBooleanTest*'
+    forkEvery = 1
+    jvmArgs "-Xmx512m"
+    testLogging {
         events "passed", "skipped", "failed"
         showStandardStreams = false
         exceptionFormat "short"
     }
-    // Set native library path from nativeRelease dependencies
-    testTask.doFirst {
-        def paths = []
-        try {
-            configurations.nativeRelease.resolve().each { f ->
-                if (f.name.endsWith('.so') || f.name.endsWith('.dll') || f.name.endsWith('.dylib') || f.isDirectory()) {
-                    paths.add(f.parentFile.absolutePath)
-                } else {
-                    paths.add(f.absolutePath)
-                }
-            }
-        } catch (Exception e) { /* ok */ }
-        if (!paths.isEmpty()) {
-            testTask.jvmArgs "-Djava.library.path=${paths.unique().join(File.pathSeparator)}"
-        }
-    }
-}
-
-test {
-    nativeConfigForTest(it)
-    // Mechanism tests + HAL-dependent tests need CTRE/WPILib simulation runtime
-    // Run via: ./gradlew simulateJava  (tests all mechanisms through RobotContainer)
-    // Run via: ./gradlew testAll       (JUnit tests with simulation runtime)
-    exclude '**/mechanisms/**'
-    // SlewRateLimiter and TimedBoolean use WPILib Timer which requires HAL native libs
-    exclude '**/SlewRateLimiterTest*'
-    exclude '**/TimedBooleanTest*'
 }
 
 // Task for running all tests including mechanisms (requires sim runtime)
 tasks.register('testAll', Test) {
-    nativeConfigForTest(it)
+    useJUnitPlatform()
     classpath = tasks.test.classpath
     testClassesDirs = tasks.test.testClassesDirs
+    forkEvery = 1
+    jvmArgs "-Xmx512m"
+    testLogging {
+        events "passed", "skipped", "failed"
+        showStandardStreams = false
+        exceptionFormat "short"
+    }
 }
 
-wpi.java.configureExecutableTasks(jar)
-wpi.java.configureTestTasks(test)
-
-wpi.sim.addGui().defaultEnabled = true
-wpi.sim.addDriverstation()
+jar {
+    manifest edu.wpi.first.gradlerio.GradleRIOPlugin.javaManifest(ROBOT_MAIN_CLASS)
+}
 
 tasks.withType(JavaCompile) {
-    options.compilerArgs << '-Xlint:none'
+    options.compilerArgs.add '-Xlint:none'
     options.encoding = 'UTF-8'
 }
