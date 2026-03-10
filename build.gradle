@@ -122,6 +122,9 @@ tasks.register('testAll', Test) {
     testClassesDirs = tasks.test.testClassesDirs
 }
 
+wpi.java.configureExecutableTasks(jar)
+wpi.java.configureTestTasks(test)
+
 wpi.sim.addGui().defaultEnabled = true
 wpi.sim.addDriverstation()
 
