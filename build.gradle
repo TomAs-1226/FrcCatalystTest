@@ -1,0 +1,127 @@
+plugins {
+    id "java"
+    id "edu.wpi.first.GradleRIO" version "2026.2.1"
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+def ROBOT_MAIN_CLASS = "frc.robot.Main"
+
+deploy {
+    targets {
+        roborio(getTargetTypeClass('RoboRIO')) {
+            team = 9999
+            debug = project.frc.getDebugOrDefault(false)
+            artifacts {
+                frcJava(getArtifactTypeClass('FRCJavaArtifact')) {
+                    gcType = edu.wpi.first.gradlerio.deploy.roborio.GarbageCollectorType.Other
+                    jvmArgs.add("-XX:+UseG1GC")
+                }
+            }
+        }
+    }
+}
+
+def includeDesktopSupport = true
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+
+    String publicFolder = System.getenv('PUBLIC') ?: 'C:\\Users\\Public'
+    maven {
+        name 'frcHome'
+        url new File(publicFolder, 'wpilib/2026/maven')
+    }
+    maven { url "https://frcmaven.wpi.edu/artifactory/release/" }
+    maven { url "https://maven.ctr-electronics.com/release/" }
+    maven { url "https://maven.photonvision.org/repository/internal/" }
+    maven { url "https://maven.photonvision.org/repository/snapshots/" }
+    maven { url "https://3015rangerrobotics.github.io/pathplannerlib/repo" }
+}
+
+dependencies {
+    implementation wpi.java.deps.wpilib()
+    implementation wpi.java.vendor.java()
+
+    roborioDebug wpi.java.deps.wpilibJniDebug(wpi.platforms.roborio)
+    roborioDebug wpi.java.vendor.jniDebug(wpi.platforms.roborio)
+    roborioRelease wpi.java.deps.wpilibJniRelease(wpi.platforms.roborio)
+    roborioRelease wpi.java.vendor.jniRelease(wpi.platforms.roborio)
+
+    nativeDebug wpi.java.deps.wpilibJniDebug(wpi.platforms.desktop)
+    nativeDebug wpi.java.vendor.jniDebug(wpi.platforms.desktop)
+    nativeRelease wpi.java.deps.wpilibJniRelease(wpi.platforms.desktop)
+    nativeRelease wpi.java.vendor.jniRelease(wpi.platforms.desktop)
+
+    simulationDebug wpi.sim.enableDebug()
+    simulationRelease wpi.sim.enableRelease()
+
+    // FrcCatalyst (from local Maven)
+    implementation "com.frccatalyst:FrcCatalyst:1.0.0"
+
+    // Test dependencies
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+    // WPILib + vendor JNI for tests (needed for HAL simulation in JUnit)
+    testImplementation wpi.java.deps.wpilibJniRelease(wpi.platforms.desktop)
+    testImplementation wpi.java.vendor.jniRelease(wpi.platforms.desktop)
+}
+
+// Configure native library paths for test JVM (needed for HAL)
+def nativeConfigForTest = { Test testTask ->
+    testTask.useJUnitPlatform()
+    testTask.forkEvery = 1
+    testTask.jvmArgs "-Xmx512m"
+    testTask.testLogging {
+        events "passed", "skipped", "failed"
+        showStandardStreams = false
+        exceptionFormat "short"
+    }
+    // Set native library path from nativeRelease dependencies
+    testTask.doFirst {
+        def paths = []
+        try {
+            configurations.nativeRelease.resolve().each { f ->
+                if (f.name.endsWith('.so') || f.name.endsWith('.dll') || f.name.endsWith('.dylib') || f.isDirectory()) {
+                    paths.add(f.parentFile.absolutePath)
+                } else {
+                    paths.add(f.absolutePath)
+                }
+            }
+        } catch (Exception e) { /* ok */ }
+        if (!paths.isEmpty()) {
+            testTask.jvmArgs "-Djava.library.path=${paths.unique().join(File.pathSeparator)}"
+        }
+    }
+}
+
+test {
+    nativeConfigForTest(it)
+    // Mechanism tests + HAL-dependent tests need CTRE/WPILib simulation runtime
+    // Run via: ./gradlew simulateJava  (tests all mechanisms through RobotContainer)
+    // Run via: ./gradlew testAll       (JUnit tests with simulation runtime)
+    exclude '**/mechanisms/**'
+    // SlewRateLimiter and TimedBoolean use WPILib Timer which requires HAL native libs
+    exclude '**/SlewRateLimiterTest*'
+    exclude '**/TimedBooleanTest*'
+}
+
+// Task for running all tests including mechanisms (requires sim runtime)
+tasks.register('testAll', Test) {
+    nativeConfigForTest(it)
+    classpath = tasks.test.classpath
+    testClassesDirs = tasks.test.testClassesDirs
+}
+
+wpi.sim.addGui().defaultEnabled = true
+wpi.sim.addDriverstation()
+
+tasks.withType(JavaCompile) {
+    options.compilerArgs << '-Xlint:none'
+    options.encoding = 'UTF-8'
+}
