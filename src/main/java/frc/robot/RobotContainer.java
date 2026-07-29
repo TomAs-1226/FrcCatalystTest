@@ -9,26 +9,43 @@ import frc.lib.catalyst.hardware.MotorType;
 import frc.lib.catalyst.mechanisms.*;
 import frc.lib.catalyst.util.*;
 
+import frc.lib.catalyst.statemachine.Handle;
+import frc.lib.catalyst.statemachine.Routing;
+import frc.lib.catalyst.statemachine.goals.ClawGoal;
+import frc.lib.catalyst.statemachine.goals.FlywheelGoal;
+import frc.lib.catalyst.statemachine.goals.LinearGoal;
+import frc.lib.catalyst.statemachine.goals.RollerGoal;
+import frc.lib.catalyst.statemachine.goals.RotationalGoal;
+import frc.lib.catalyst.statemachine.goals.ServoGoal;
+import frc.lib.catalyst.statemachine.goals.WinchGoal;
+import frc.lib.catalyst.statemachine.goals.WristGoal;
+import frc.lib.catalyst.statemachine.mech.Mechanisms;
+import frc.lib.catalyst.statemachine.robot.Superstructure;
+
 /**
- * Test RobotContainer that creates every FrcCatalyst mechanism type
- * and wires them up for simulation testing.
+ * Test RobotContainer that creates every FrcCatalyst mechanism type and drives them
+ * with the modern {@link Superstructure} state machine (Catalyst 1.2+).
  *
- * This validates that:
- * 1. All mechanisms can be instantiated with builder pattern
- * 2. All command factories produce valid commands
- * 3. Simulation physics models run without errors
- * 4. Telemetry publishes correctly
- * 5. Named presets, limit switches, and safety features work
+ * <p>Updated for Catalyst v1.3.2. This validates that:
+ * <ol>
+ *   <li>Every mechanism builds with the builder pattern, including the newer
+ *       {@link ClawMechanism}, {@link DifferentialWristMechanism}, and {@link ServoMechanism}.</li>
+ *   <li>All nine bound mechanisms drive as one whole-robot {@link Superstructure} instead of the
+ *       deprecated {@code SuperstructureCoordinator}: a legal-transition graph, a staged edge, an
+ *       entry guard, and a global interlock.</li>
+ *   <li>{@code explain()} prints a readable dump of the machine on demand.</li>
+ *   <li>Simulation physics, telemetry, and command factories all run without errors.</li>
+ * </ol>
  */
 public class RobotContainer {
 
-    // Controller
+    // Controllers
     private final CommandXboxController driver = new CommandXboxController(0);
     private final CommandXboxController operator = new CommandXboxController(1);
 
-    // ===== MECHANISMS =====
+    // ===== MECHANISMS (all bound into the superstructure below) =====
 
-    /** Elevator: 2-stage cascade, Kraken X60, Motion Magic + limit switches */
+    /** Elevator: 2-stage cascade, Kraken X60, Motion Magic. */
     private final LinearMechanism elevator = new LinearMechanism(
             LinearMechanism.Config.builder()
                     .name("Elevator")
@@ -36,7 +53,7 @@ public class RobotContainer {
                     .follower(2, true)
                     .motorType(MotorType.KRAKEN_X60)
                     .gearRatio(10.0)
-                    .drumRadius(0.0254) // 1 inch spool
+                    .drumRadius(0.0254)
                     .stages(2)
                     .range(0.0, 1.2)
                     .mass(5.0)
@@ -53,7 +70,7 @@ public class RobotContainer {
                     .build()
     );
 
-    /** Arm: single-jointed, cosine gravity, with hard stop */
+    /** Arm: single-jointed, cosine gravity. */
     private final RotationalMechanism arm = new RotationalMechanism(
             RotationalMechanism.Config.builder()
                     .name("Arm")
@@ -70,32 +87,26 @@ public class RobotContainer {
                     .currentLimit(30)
                     .position("STOW", 0)
                     .position("INTAKE", 15)
-                    .position("AMP", 90)
                     .position("SCORE", 100)
                     .build()
     );
 
-    /** Wrist: small rotational mechanism */
-    private final RotationalMechanism wrist = new RotationalMechanism(
-            RotationalMechanism.Config.builder()
+    /** Wrist: differential (pitch + roll), native CTRE differential control (new in 1.2). */
+    private final DifferentialWristMechanism wrist = new DifferentialWristMechanism(
+            DifferentialWristMechanism.Config.builder()
                     .name("Wrist")
-                    .motor(5)
-                    .motorType(MotorType.FALCON_500)
-                    .gearRatio(25.0)
-                    .length(0.15)
-                    .mass(0.5)
-                    .range(-90, 90)
+                    .leftMotor(4)
+                    .rightMotor(5)
+                    .gearRatio(40.0)
+                    .pitchRange(-40, 40)
+                    .rollRange(-40, 40)
                     .pid(40, 0, 0.5)
-                    .gravityGain(0.15)
-                    .useCosineGravity(true)
-                    .motionMagic(300, 600, 3000)
-                    .position("STOW", 0)
-                    .position("INTAKE", -45)
-                    .position("SCORE", 60)
+                    .motionMagic(2.0, 6.0, 60.0)
+                    .tolerance(2.0)
                     .build()
     );
 
-    /** Shooter: dual flywheel for differential spin */
+    /** Shooter: dual flywheel for differential spin. */
     private final FlywheelMechanism shooter = new FlywheelMechanism(
             FlywheelMechanism.Config.builder()
                     .name("Shooter")
@@ -111,7 +122,7 @@ public class RobotContainer {
                     .build()
     );
 
-    /** Intake: roller with stall detection */
+    /** Intake: roller with stall detection. */
     private final RollerMechanism intake = new RollerMechanism(
             RollerMechanism.Config.builder()
                     .name("Intake")
@@ -125,7 +136,19 @@ public class RobotContainer {
                     .build()
     );
 
-    /** Climber: winch mechanism */
+    /** Claw: motor-driven gripper with game-piece detection (new in 1.2). */
+    private final ClawMechanism claw = new ClawMechanism(
+            ClawMechanism.Config.builder()
+                    .name("Claw")
+                    .motor(11)
+                    .currentLimit(30)
+                    .closeVoltage(3.0)
+                    .openVoltage(-3.0)
+                    .holdVoltage(1.0)
+                    .build()
+    );
+
+    /** Climber: winch mechanism. */
     private final WinchMechanism climber = new WinchMechanism(
             WinchMechanism.Config.builder()
                     .name("Climber")
@@ -133,13 +156,26 @@ public class RobotContainer {
                     .gearRatio(25.0)
                     .spoolRadius(0.02)
                     .range(0.0, 0.6)
+                    .loadMass(8.0)
                     .extendSpeed(0.8)
                     .retractSpeed(-1.0)
                     .currentLimit(80)
                     .build()
     );
 
-    /** Elevator with WPILib ProfiledPID (alternative control) */
+    /** Hood: PWM servo with named positions (new in 1.3.0). */
+    private final ServoMechanism hood = new ServoMechanism(
+            ServoMechanism.Config.builder()
+                    .name("Hood")
+                    .channel(0)
+                    .angleRange(15, 55)
+                    .position("CLOSE", 15)
+                    .position("MID", 35)
+                    .position("FAR", 55)
+                    .build()
+    );
+
+    /** Elevator with WPILib ProfiledPID (alternative control, NOT in the state machine). */
     private final LinearMechanism profiledElevator = new LinearMechanism(
             LinearMechanism.Config.builder()
                     .name("ProfiledElevator")
@@ -165,9 +201,15 @@ public class RobotContainer {
     private final MovingAverage currentFilter = new MovingAverage(10);
     private final TimedBoolean stallDetector = new TimedBoolean(0.3);
 
-    // ===== COORDINATOR =====
+    // ===== STATE MACHINE =====
 
-    private final SuperstructureCoordinator superstructure = new SuperstructureCoordinator();
+    /** The whole-robot states this test robot can be in. */
+    public enum State { STOW, INTAKE, CARRY, AIM, SCORE, CLIMB }
+
+    /** True once the driver has "armed" the endgame; gates entry to CLIMB. */
+    private boolean climbArmed = false;
+
+    private final Superstructure<State> superstructure = buildSuperstructure();
 
     public RobotContainer() {
         // Populate shooter lookup table
@@ -176,102 +218,165 @@ public class RobotContainer {
         shooterTable.add(3.0, 4200);
         shooterTable.add(5.0, 5000);
 
-        // Configure superstructure
-        superstructure
-                .withLinear("elevator", elevator)
-                .withRotational("arm", arm)
-                .withRotational("wrist", wrist);
-
-        superstructure.defineState("STOW")
-                .setLinear("elevator", 0.0)
-                .setRotational("arm", 0.0)
-                .setRotational("wrist", 0.0)
-                .done();
-
-        superstructure.defineState("INTAKE")
-                .setLinear("elevator", 0.3)
-                .setRotational("arm", 15.0)
-                .setRotational("wrist", -45.0)
-                .done();
-
-        superstructure.defineState("SCORE_HIGH")
-                .setLinear("elevator", 1.1)
-                .setRotational("arm", 100.0)
-                .setRotational("wrist", 60.0)
-                .done();
-
-        // Set default commands
-        elevator.setDefaultCommand(elevator.holdPosition());
-        arm.setDefaultCommand(arm.holdPosition());
-        wrist.setDefaultCommand(wrist.holdPosition());
+        // Only mechanisms NOT owned by the superstructure get a manual default command.
+        // The superstructure installs its own GoalRunner default on every bound mechanism,
+        // so setting one here would make build() fail.
         profiledElevator.setDefaultCommand(profiledElevator.holdPositionProfiled());
 
-        // Put mechanism info on dashboard
         publishDashboard();
 
-        System.out.println("RobotContainer initialized with all mechanisms!");
+        System.out.println("RobotContainer initialized with the Superstructure state machine.");
         System.out.println("  Elevator travel: " + elevator.getPosition() + "m");
         System.out.println("  Arm angle: " + arm.getAngle() + " deg");
         System.out.println("  Shooter table at 2.5m: " + shooterTable.get(2.5) + " RPM");
 
-        // Verify utility classes work
+        // explain() prints a plain-language dump of what was built and why it might be stuck.
+        System.out.println(superstructure.explain());
+
         testUtilities();
     }
 
-    /** Bind teleop controls */
-    public void configureTeleopCommands() {
-        // Elevator presets
-        operator.a().onTrue(elevator.goTo("STOW"));
-        operator.b().onTrue(elevator.goTo("INTAKE"));
-        operator.x().onTrue(elevator.goTo("MID"));
-        operator.y().onTrue(elevator.goTo("HIGH"));
+    /**
+     * Builds the whole-robot state machine over all bound mechanisms.
+     *
+     * <p>Shows the modern API that replaces the deprecated {@code SuperstructureCoordinator}:
+     * a typed transition graph, a staged edge (elevator up before the arm swings), an entry
+     * guard (cannot SCORE without a game piece), and a global interlock (nothing but STOW/CLIMB
+     * while the winch is extended).
+     */
+    private Superstructure<State> buildSuperstructure() {
+        Superstructure.Builder<State> b =
+                Superstructure.builder(State.class, "TestSuperstructure");
 
-        // Arm presets
-        operator.povUp().onTrue(arm.goTo("SCORE"));
-        operator.povDown().onTrue(arm.goTo("STOW"));
-        operator.povLeft().onTrue(arm.goTo("INTAKE"));
+        Handle<LinearGoal> hElevator = b.bind("elevator", Mechanisms.linear("elevator", elevator));
+        Handle<RotationalGoal> hArm = b.bind("arm", Mechanisms.rotational("arm", arm));
+        Handle<WristGoal> hWrist = b.bind("wrist", Mechanisms.wrist("wrist", wrist));
+        Handle<FlywheelGoal> hShooter = b.bind("shooter", Mechanisms.flywheel("shooter", shooter));
+        Handle<RollerGoal> hIntake = b.bind("intake", Mechanisms.roller("intake", intake));
+        Handle<ClawGoal> hClaw = b.bind("claw", Mechanisms.claw("claw", claw));
+        Handle<WinchGoal> hClimber = b.bind("climber", Mechanisms.winch("climber", climber));
+        Handle<ServoGoal> hHood = b.bind("hood", Mechanisms.servo("hood", hood));
 
-        // Intake
-        operator.rightTrigger().whileTrue(intake.intake());
-        operator.leftTrigger().whileTrue(intake.eject());
+        return b
+                .logPrefix("Test")
+                .alertSubsystem("Test")
+                .initialState(State.STOW)
+                .routing(Routing.SHORTEST_PATH)
+                .defaultTimeout(4.0)
+                .historyCapacity(50)
 
-        // Shooter
-        operator.rightBumper().whileTrue(shooter.spinUp(70));
+                // Safe posture inherited by every state unless it says otherwise.
+                .defaults(s -> s
+                        .set(hWrist, WristGoal.level())
+                        .set(hShooter, FlywheelGoal.idle())
+                        .set(hIntake, RollerGoal.idle())
+                        .set(hClaw, ClawGoal.hold())
+                        .set(hClimber, WinchGoal.stop())
+                        .set(hHood, ServoGoal.preset("CLOSE")))
 
-        // Climber
-        driver.povUp().whileTrue(climber.extend());
-        driver.povDown().whileTrue(climber.retract());
+                .state(State.STOW, s -> s
+                        .set(hElevator, LinearGoal.preset("STOW"))
+                        .set(hArm, RotationalGoal.degrees(0)))
 
-        // Superstructure transitions
-        driver.a().onTrue(superstructure.transitionTo("STOW"));
-        driver.y().onTrue(superstructure.transitionTo("SCORE_HIGH"));
+                .state(State.INTAKE, s -> s
+                        .set(hElevator, LinearGoal.preset("INTAKE"))
+                        .set(hArm, RotationalGoal.degrees(15))
+                        .set(hWrist, WristGoal.of(-20, 0))
+                        .set(hIntake, RollerGoal.intakeUntilPiece(3.0))
+                        .set(hClaw, ClawGoal.open())
+                        .timeout(6.0))
 
-        // Profiled elevator test
-        driver.x().onTrue(profiledElevator.goToProfiled("TOP"));
-        driver.b().onTrue(profiledElevator.goToProfiled("BOTTOM"));
+                .state(State.CARRY, s -> s
+                        .set(hElevator, LinearGoal.preset("MID"))
+                        .set(hArm, RotationalGoal.degrees(15))
+                        .set(hClaw, ClawGoal.close()))
 
-        // Manual jog
-        operator.leftBumper().whileTrue(
-                elevator.jog(() -> -operator.getLeftY() * 4.0)
-        );
+                .state(State.AIM, s -> s
+                        .set(hElevator, LinearGoal.preset("HIGH"))
+                        .set(hArm, RotationalGoal.degrees(100))
+                        .set(hWrist, WristGoal.of(10, 0))
+                        .set(hShooter, FlywheelGoal.rps(45))
+                        .set(hHood, ServoGoal.preset("FAR"))
+                        .set(hClaw, ClawGoal.close()))
+
+                // Release: needs a real game piece, and everything must settle before the claw counts.
+                .state(State.SCORE, s -> s
+                        .set(hElevator, LinearGoal.preset("HIGH"))
+                        .set(hArm, RotationalGoal.degrees(100))
+                        .set(hShooter, FlywheelGoal.rps(45))
+                        .set(hHood, ServoGoal.preset("FAR"))
+                        .set(hClaw, ClawGoal.open())
+                        .set(hIntake, RollerGoal.eject(0.4))
+                        .settleFor(0.2)
+                        .entryGuard(claw::hasPiece, "no piece"))
+
+                .state(State.CLIMB, s -> s
+                        .set(hElevator, LinearGoal.preset("STOW"))
+                        .set(hArm, RotationalGoal.degrees(0))
+                        .set(hClimber, WinchGoal.extend())
+                        .entryGuard(() -> climbArmed, "not armed")
+                        .timeout(8.0)
+                        .recoverTo(State.STOW))
+
+                // STOW is the hub; SCORE hangs off AIM alone, so you cannot score from stowed in one hop.
+                .allowBoth(State.STOW, State.INTAKE)
+                .allowBoth(State.STOW, State.CARRY)
+                .allowBoth(State.STOW, State.AIM)
+                .allowBoth(State.STOW, State.CLIMB)
+                .allow(State.INTAKE, State.CARRY)
+                .allowBoth(State.CARRY, State.AIM)
+                .allow(State.AIM, State.SCORE)
+                .allow(State.SCORE, State.CARRY, State.STOW)
+
+                // Raise the elevator BEFORE the arm and wrist swing out.
+                .edge(State.STOW, State.AIM, e -> e
+                        .stage(hElevator)
+                        .stage(hArm, hWrist)
+                        .timeout(5.0))
+
+                // Global: while the winch is extended, only STOW and CLIMB are legal.
+                .interlock("winchStowed",
+                        () -> !climber.isFullyExtended(),
+                        st -> st != State.CLIMB && st != State.STOW)
+
+                .build();
     }
 
-    /** Set up auto commands */
+    /** Bind teleop controls. Drivers ask for whole-robot STATES, not individual mechanisms. */
+    public void configureTeleopCommands() {
+        // Superstructure states
+        operator.a().onTrue(superstructure.goTo(State.STOW));
+        operator.b().onTrue(superstructure.goTo(State.INTAKE));
+        operator.x().onTrue(superstructure.goTo(State.CARRY));
+        operator.y().onTrue(superstructure.goTo(State.AIM));
+        operator.rightBumper().onTrue(superstructure.goTo(State.SCORE));
+
+        // Arm the endgame, then climb.
+        driver.back().onTrue(Commands.runOnce(() -> climbArmed = !climbArmed));
+        driver.start().onTrue(superstructure.goTo(State.CLIMB));
+
+        // Print explain() to the console on demand — the "why is it stuck?" button.
+        operator.leftBumper().onTrue(Commands.runOnce(() -> System.out.println(superstructure.explain())));
+
+        // Profiled elevator is standalone (not in the state machine).
+        driver.x().onTrue(profiledElevator.goToProfiled("TOP"));
+        driver.b().onTrue(profiledElevator.goToProfiled("BOTTOM"));
+    }
+
+    /** Set up auto commands: drive the machine through a scoring cycle. */
     public void configureAutoCommands() {
-        // Simple auto: raise elevator, shoot, stow
         Command simpleAuto = Commands.sequence(
-                elevator.goToAndWait("HIGH", 0.02),
-                arm.goToAndWait("SCORE", 2.0),
-                shooter.spinUpAndWait(70),
-                Commands.waitSeconds(1.0),
-                shooter.stopCommand(),
-                superstructure.transitionTo("STOW")
+                superstructure.goTo(State.INTAKE),
+                superstructure.goTo(State.AIM),
+                superstructure.goTo(State.SCORE),
+                Commands.waitSeconds(0.5),
+                superstructure.goTo(State.STOW)
         );
         simpleAuto.schedule();
     }
 
     private void publishDashboard() {
-        // Characterization helpers (uses CatalystMotor directly)
+        // Characterization helper (uses CatalystMotor directly)
         CharacterizationHelper elevatorChar = new CharacterizationHelper(
                 "Elevator", elevator, elevator.getMotor()
         );
@@ -284,8 +389,7 @@ public class RobotContainer {
         MechanismVisualizer viz = new MechanismVisualizer("TestRobot", 1.0, 1.5);
         var elevatorViz = viz.addElevator("Elevator", 0.5, 0.0, 1.2,
                 edu.wpi.first.wpilibj.util.Color.kBlue);
-        var armViz = viz.addArm("Arm", elevatorViz, 0.5,
-                edu.wpi.first.wpilibj.util.Color.kRed);
+        viz.addArm("Arm", elevatorViz, 0.5, edu.wpi.first.wpilibj.util.Color.kRed);
 
         // Shooter interpolation test
         SmartDashboard.putNumber("ShooterTable/1.0m", shooterTable.get(1.0));
@@ -294,46 +398,30 @@ public class RobotContainer {
     }
 
     private void testUtilities() {
-        // Test CatalystMath
-        double deadbanded = CatalystMath.deadband(0.03, 0.05);
-        assert deadbanded == 0 : "Deadband failed for value inside deadband";
+        // CatalystMath
+        assert CatalystMath.deadband(0.03, 0.05) == 0 : "Deadband failed";
+        assert Math.abs(CatalystMath.squareInput(0.5) - 0.25) < 0.001 : "Square input failed";
+        assert Math.abs(CatalystMath.angleDifference(350, 10) - 20) < 0.001 : "Angle difference failed";
+        assert Math.abs(CatalystMath.normalizeAngle(370) - 10) < 0.001 : "Normalize angle failed";
 
-        double squared = CatalystMath.squareInput(0.5);
-        assert Math.abs(squared - 0.25) < 0.001 : "Square input failed";
-
-        double angleDiff = CatalystMath.angleDifference(350, 10);
-        assert Math.abs(angleDiff - 20) < 0.001 : "Angle difference failed";
-
-        double normalized = CatalystMath.normalizeAngle(370);
-        assert Math.abs(normalized - 10) < 0.001 : "Normalize angle failed";
-
-        // Test SlewRateLimiter
+        // SlewRateLimiter
         double slewed = driveRateLimiter.calculate(1.0);
         assert slewed > 0 && slewed <= 1.0 : "Slew rate limiter failed";
 
-        // Test MovingAverage
+        // MovingAverage
         for (int i = 0; i < 10; i++) currentFilter.calculate(5.0);
         assert Math.abs(currentFilter.get() - 5.0) < 0.001 : "Moving average failed";
 
-        // Test TimedBoolean
-        boolean stalled = stallDetector.update(false);
-        assert !stalled : "TimedBoolean should be false initially";
+        // TimedBoolean
+        assert !stallDetector.update(false) : "TimedBoolean should be false initially";
 
-        // Test FeedforwardGains
+        // FeedforwardGains
         FeedforwardGains elevFF = FeedforwardGains.elevator(0.12, 2.5, 0.1, 0.35);
-        double holdV = elevFF.calculateElevator();
-        assert Math.abs(holdV - 0.35) < 0.001 : "Elevator hold FF failed";
+        assert Math.abs(elevFF.calculateElevator() - 0.35) < 0.001 : "Elevator hold FF failed";
 
-        FeedforwardGains armFF = FeedforwardGains.arm(0.15, 1.8, 0.05, 0.5);
-        double armHoldH = armFF.calculateArm(0); // horizontal
-        assert Math.abs(armHoldH - 0.5) < 0.001 : "Arm hold FF at horizontal failed";
-        double armHoldV = armFF.calculateArm(Math.PI / 2); // vertical
-        assert Math.abs(armHoldV) < 0.001 : "Arm hold FF at vertical failed";
+        // MotorType
+        assert MotorType.KRAKEN_X60.freeSpeedRPS() > 0 : "Kraken free speed should be positive";
 
-        // Test MotorType
-        double krakenFreeSpeed = MotorType.KRAKEN_X60.freeSpeedRPS();
-        assert krakenFreeSpeed > 0 : "Kraken free speed should be positive";
-
-        System.out.println("  All utility tests passed!");
+        System.out.println("  All utility checks passed!");
     }
 }

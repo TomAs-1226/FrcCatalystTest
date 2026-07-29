@@ -3,10 +3,11 @@
 Integration test suite and example project for [FrcCatalyst](https://github.com/TomAs-1226/FrcCatalyst).
 
 <p>
+  <img src="https://img.shields.io/badge/FrcCatalyst-v1.3.2-e94560?style=flat-square" alt="FrcCatalyst"/>
   <img src="https://img.shields.io/badge/WPILib-2026.2.1-green?style=flat-square" alt="WPILib"/>
   <img src="https://img.shields.io/badge/Phoenix%206-26.1.1-orange?style=flat-square" alt="Phoenix 6"/>
   <img src="https://img.shields.io/badge/Java-17-blue?style=flat-square&logo=openjdk" alt="Java 17"/>
-  <img src="https://img.shields.io/badge/Tests-68%20passing-brightgreen?style=flat-square" alt="Tests"/>
+  <img src="https://img.shields.io/badge/Tests-passing-brightgreen?style=flat-square" alt="Tests"/>
 </p>
 
 ---
@@ -15,39 +16,43 @@ Integration test suite and example project for [FrcCatalyst](https://github.com/
 
 This project serves two purposes:
 
-1. **Test Suite** — 68+ JUnit tests validating every FrcCatalyst component (utilities, hardware types, mechanisms, and the superstructure coordinator)
-2. **Example Code** — A complete `RobotContainer` showing how to use every mechanism type, plus a standalone `BasicRobot` example for quick reference
+1. **Test Suite** — JUnit tests validating every FrcCatalyst component (utilities, hardware types, all mechanisms, and the modern `Superstructure` state machine)
+2. **Example Code** — A complete `RobotContainer` that drives every mechanism through one `Superstructure` state machine, plus a standalone `BasicRobot` example for quick reference
 
 ## Prerequisites
 
 - **WPILib 2026.2.1** installed
-- **FrcCatalyst** published to local Maven (see below)
+- **Internet connection** (FrcCatalyst v1.3.2 is pulled from JitPack on the first build)
 - **Java 17** (included with WPILib)
 
 ## Setup
 
-### 1. Clone Both Repos
+### 1. Clone this repo
 
 ```bash
-git clone https://github.com/TomAs-1226/FrcCatalyst.git
 git clone https://github.com/TomAs-1226/FrcCatalystTest.git
 ```
 
-### 2. Publish FrcCatalyst to Local Maven
+### 2. Build it
 
 ```bash
+cd FrcCatalystTest
+./gradlew build
+```
+
+That's it. FrcCatalyst v1.3.2 comes from JitPack automatically, so there is nothing else to install.
+
+<details><summary>Rather build FrcCatalyst from source?</summary>
+
+Clone the library, publish it to your local Maven, then change the dependency in `build.gradle`
+from the JitPack coordinate to `com.frccatalyst:FrcCatalyst:1.3.2`:
+
+```bash
+git clone https://github.com/TomAs-1226/FrcCatalyst.git
 cd FrcCatalyst
 ./gradlew publishToMavenLocal
 ```
-
-This installs the library to your local Maven repository so the test project can find it.
-
-### 3. Build the Test Project
-
-```bash
-cd ../FrcCatalystTest
-./gradlew build
-```
+</details>
 
 ## Running Tests
 
@@ -80,7 +85,10 @@ Runs everything above plus:
 - `FlywheelMechanismTest` — shooter velocity control, dual motors
 - `RollerMechanismTest` — intake commands, game piece detection
 - `WinchMechanismTest` — climber extend/retract, limits
-- `SuperstructureCoordinatorTest` — state machine, transitions
+- `ClawMechanismTest` — gripper commands, game-piece detection (new in 1.2)
+- `DifferentialWristMechanismTest` — pitch + roll construction, commands, ranges (new in 1.2)
+- `ServoMechanismTest` — PWM servo commands, angle clamping, named positions (new in 1.3)
+- `SuperstructureTest` — the modern `Superstructure` state machine: graph, transitions, `explain()`
 
 > **Note:** Mechanism tests require WPILib simulation native libraries. They are excluded from the default `test` task because they need the HAL and CTRE Phoenix simulation runtime.
 
@@ -112,7 +120,10 @@ FrcCatalystTest/
 │       │   ├── FlywheelMechanismTest.java
 │       │   ├── RollerMechanismTest.java
 │       │   ├── WinchMechanismTest.java
-│       │   └── SuperstructureCoordinatorTest.java
+│       │   ├── ClawMechanismTest.java
+│       │   ├── DifferentialWristMechanismTest.java
+│       │   ├── ServoMechanismTest.java
+│       │   └── SuperstructureTest.java
 │       └── util/
 │           ├── CatalystMathTest.java
 │           ├── FeedforwardGainsTest.java
@@ -140,13 +151,13 @@ FrcCatalystTest/
 
 ### RobotContainer (Full Integration)
 
-`src/main/java/frc/robot/RobotContainer.java` — Tests every FrcCatalyst feature:
-- All 5 mechanism types (elevator, arm, wrist, shooter, intake, climber)
-- SuperstructureCoordinator with 3 states
-- InterpolatingTable for shooter distance lookup
-- SlewRateLimiter, MovingAverage, TimedBoolean utilities
+`src/main/java/frc/robot/RobotContainer.java` — Exercises every FrcCatalyst feature:
+- Eight mechanisms bound into one `Superstructure` state machine: elevator, arm, differential wrist, shooter, intake, claw, climber, and a servo hood
+- A six-state graph (STOW / INTAKE / CARRY / AIM / SCORE / CLIMB) with a staged edge (elevator up before the arm swings), an entry guard (no SCORE without a game piece), and a global interlock (only STOW/CLIMB while the winch is extended)
+- `explain()` printed on init and on a button — the "why is it stuck?" dump
+- InterpolatingTable, SlewRateLimiter, MovingAverage, TimedBoolean utilities
 - CharacterizationHelper and MechanismVisualizer setup
-- ProfiledPID alternative elevator
+- ProfiledPID alternative elevator (standalone, not in the state machine)
 
 ## Deploying to a Robot
 
@@ -202,7 +213,7 @@ void testWithTimer() {
 
 | Issue | Solution |
 |-------|----------|
-| `Could not find com.frccatalyst:FrcCatalyst:1.0.0` | Run `./gradlew publishToMavenLocal` in the FrcCatalyst directory first |
+| `Could not find com.github.TomAs-1226:FrcCatalyst:v1.3.2` | Check your internet connection. JitPack builds the library on first request, so the very first build can take a minute. Or build from source (see Setup). |
 | JVM crash during mechanism tests | Use `./gradlew testAll` (not `test`) — mechanism tests need separate JVM config |
 | `UnsatisfiedLinkError` on native libs | Make sure WPILib 2026 is installed and `WPILIB_HOME` is set |
 | Tests pass locally but fail in CI | CI needs `chmod +x gradlew` and mechanism tests require simulation runtime |
