@@ -70,10 +70,10 @@ dependencies {
     nativeRelease wpi.java.vendor.jniRelease(wpi.platforms.desktop)
     simulationRelease wpi.sim.enableRelease()
 
-    // FrcCatalyst v1.6.0 (from JitPack — portable, builds anywhere).
+    // FrcCatalyst v1.7.0 (from JitPack — portable, builds anywhere).
     // Local-source alternative: run `./gradlew publishToMavenLocal` in the
-    // FrcCatalyst repo, then use "com.frccatalyst:FrcCatalyst:1.6.0".
-    implementation "com.github.TomAs-1226:FrcCatalyst:v1.6.0"
+    // FrcCatalyst repo, then use "com.frccatalyst:FrcCatalyst:1.7.0".
+    implementation "com.github.TomAs-1226:FrcCatalyst:v1.7.0"
 
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
