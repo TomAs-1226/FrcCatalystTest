@@ -3,7 +3,7 @@
 Integration test suite and example project for [FrcCatalyst](https://github.com/TomAs-1226/FrcCatalyst).
 
 <p>
-  <img src="https://img.shields.io/badge/FrcCatalyst-v1.7.0-e94560?style=flat-square" alt="FrcCatalyst"/>
+  <img src="https://img.shields.io/badge/FrcCatalyst-v1.12.0-e94560?style=flat-square" alt="FrcCatalyst"/>
   <img src="https://img.shields.io/badge/WPILib-2026.2.1-green?style=flat-square" alt="WPILib"/>
   <img src="https://img.shields.io/badge/Phoenix%206-26.1.1-orange?style=flat-square" alt="Phoenix 6"/>
   <img src="https://img.shields.io/badge/Java-17-blue?style=flat-square&logo=openjdk" alt="Java 17"/>
@@ -14,9 +14,9 @@ Integration test suite and example project for [FrcCatalyst](https://github.com/
 
 ## Versions and compatibility
 
-This project builds against **FrcCatalyst v1.7.0** on WPILib 2026.2.1 (roboRIO). The newest 1.x
-release is v1.12.0, and this project has not been moved to it yet; Catalyst 2.x (Systemcore, WPILib
-2027) is not tested here. Which version goes on which robot is on [Versions and compatibility](https://tomas-1226.github.io/FrcCatalyst/versions.html).
+This project builds against **FrcCatalyst v1.12.0** (the newest 1.x release) on WPILib 2026.2.1
+(roboRIO), via the published vendordep (`vendordeps/FrcCatalyst.json`). Catalyst 2.x (Systemcore,
+WPILib 2027) is not tested here. Which version goes on which robot is on [Versions and compatibility](https://tomas-1226.github.io/FrcCatalyst/versions.html).
 
 ## What Is This?
 
@@ -28,7 +28,7 @@ This project serves two purposes:
 ## Prerequisites
 
 - **WPILib 2026.2.1** installed
-- **Internet connection** (FrcCatalyst v1.7.0 is pulled from JitPack on the first build)
+- **Internet connection** (FrcCatalyst v1.12.0 is pulled from JitPack via the vendordep on the first build)
 - **Java 17** (included with WPILib)
 
 ## Setup
@@ -46,12 +46,14 @@ cd FrcCatalystTest
 ./gradlew build
 ```
 
-That's it. FrcCatalyst v1.7.0 comes from JitPack automatically, so there is nothing else to install.
+That's it. FrcCatalyst v1.12.0 comes from JitPack automatically via the vendordep, so there is
+nothing else to install.
 
 <details><summary>Rather build FrcCatalyst from source?</summary>
 
-Clone the library, publish it to your local Maven, then change the dependency in `build.gradle`
-from the JitPack coordinate to `com.frccatalyst:FrcCatalyst:1.7.0`:
+Clone the library, publish it to your local Maven, then point `vendordeps/FrcCatalyst.json` at it —
+change the `javaDependencies` entry's `groupId` to `com.frccatalyst` and `version` to `1.12.0`
+(drop the leading `v`; that prefix is a JitPack/tag convention, not part of the Maven version):
 
 ```bash
 git clone https://github.com/TomAs-1226/FrcCatalyst.git
@@ -219,7 +221,7 @@ void testWithTimer() {
 
 | Issue | Solution |
 |-------|----------|
-| `Could not find com.github.TomAs-1226:FrcCatalyst:v1.7.0` | Check your internet connection. JitPack builds the library on first request, so the very first build can take a minute. Or build from source (see Setup). |
+| `Could not find com.github.TomAs-1226:FrcCatalyst:v1.12.0` | Check your internet connection. JitPack builds the library on first request, so the very first build can take a minute. Or build from source (see Setup). |
 | JVM crash during mechanism tests | Use `./gradlew testAll` (not `test`) — mechanism tests need separate JVM config |
 | `UnsatisfiedLinkError` on native libs | Make sure WPILib 2026 is installed and `WPILIB_HOME` is set |
 | Tests pass locally but fail in CI | CI needs `chmod +x gradlew` and mechanism tests require simulation runtime |
